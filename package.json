@@ -1,0 +1,21 @@
+{
+  "name": "fds-faucet",
+  "version": "0.1.0",
+  "description": "give a little bit of eth",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "significance",
+  "license": "ISC",
+  "dependencies": {
+    "bignumber.js": "^7.2.1",
+    "body-parser": "^1.18.3",
+    "cors": "^2.8.4",
+    "dotenv": "^6.2.0",
+    "ethers": "^4.0.4",
+    "express": "^4.16.3",
+    "pg": "^7.5.0",
+    "web3": "^1.0.0-beta.36"
+  }
+}
