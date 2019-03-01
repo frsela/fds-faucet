@@ -15,12 +15,26 @@ let dripAmt = utils.parseEther(process.env.DRIP_AMT);
 const app = express();
 const port = process.env.PORT || '3001';
 
+var redis = require('redis');
+var client = redis.createClient(process.env.REDIS_URL);
+
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
+
+let incrementNonce = ()=>{
+  return new Promise((resolve, reject)=>{
+    client.get("current_nonce", (value)=>{
+      debugger;
+    });
+  });
+};
 
 let gimmieEth = function(privateKey, address, amt){
   return new Promise((resolve, reject) => {
     let wallet = new ethers.Wallet(privateKey, provider);
+
+
+
 
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
       console.log('txs', transactionCount);
