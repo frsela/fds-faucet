@@ -58,10 +58,54 @@ let gimmieEth = function(privateKey, address, amt){
     });
   });
 };
+/**
+ * 
+ * @param {any} remoteAddress 0xffff
+ * @returns {boolean} true if no transaction from faucet till now, balance is zero, checks all previous blocks
+ */
+let viable = function (remoteAddress) // slow, will fail
+{
+    let currentBlock = provider.blockCount;
+    let count = provider.getTransactionCount(remoteAddress, currentBlock);
+    if (count > 0) return false; 
+    var balance = provider.getBalance(remoteAddress, currentBlock);
+    if (balance > 0) return false;
+
+    for (var i = currentBlock; i >= 0 && (n > 0 || bal > 0); --i) {
+        try {
+            var block = provider.getBlock(i, true);
+            if (block && block.transactions) {
+                block.transactions.forEach(function (e) {
+                    if (remoteAddress === e.from) {
+                        return false;
+                    }
+                    if (myAddr === e.to) {
+                        return false;
+                    }
+                });
+            }
+        } catch (e) { console.error("Error in block " + i, e); }
+    }
+
+    return true;
+}
 
 app.post('/gimmie', (req, res) => {
   let recipient = req.body.address;
-  console.log('requested: ' + recipient)
+  // TODO: check ip address not blacklisted 
+  let ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress; 
+
+  let notFoundedYet = viable(recipient); // so receiver did not receive any funds yet from this faucet, 
+  if (!notFoundedYet)
+  {
+      res.status(500).send({
+          result: false,
+          error: "not viable, already funded"
+      });
+      return;
+  }
+
+  console.log('requested: ' + recipient);
   gimmieEth(privateKey, recipient, dripAmt).then((tx)=>{
     res.send({
       result: true,
