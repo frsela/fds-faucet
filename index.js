@@ -79,7 +79,7 @@ let viable = function (remoteAddress) // slow, will fail
                     if (remoteAddress === e.from) {
                         return false;
                     }
-                    if (myAddr === e.to) {
+                    if (remoteAddress === e.to) {
                         return false;
                     }
                 });
