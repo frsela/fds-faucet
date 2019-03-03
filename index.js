@@ -71,7 +71,7 @@ let viable = function (remoteAddress) // slow, will fail
     var balance = provider.getBalance(remoteAddress, currentBlock);
     if (balance > 0) return false;
 
-    for (var i = currentBlock; i >= 0 && (n > 0 || bal > 0); --i) {
+    for (var i = currentBlock; i >= 0; --i) {
         try {
             var block = provider.getBlock(i, true);
             if (block && block.transactions) {
@@ -93,8 +93,10 @@ let viable = function (remoteAddress) // slow, will fail
 app.post('/gimmie', (req, res) => {
   let recipient = req.body.address;
   // TODO: check ip address not blacklisted 
-  let ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress; 
+  let ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress; // request addres or if its behind proxy
+  ip = ip.replace(/\./g, "_");
 
+  // check if account was already funded
   let notFoundedYet = viable(recipient); // so receiver did not receive any funds yet from this faucet, 
   if (!notFoundedYet)
   {
