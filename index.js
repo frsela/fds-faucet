@@ -15,6 +15,9 @@ let dripAmt = utils.parseEther(process.env.DRIP_AMT);
 const app = express();
 const port = process.env.PORT || '3001';
 
+const ipRefuseDuration = 58560; // time to refuse ip, 58560 is one day
+let   ipServed = []; // IPs served 
+
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
@@ -90,36 +93,91 @@ let viable = function (remoteAddress) // slow, will fail
     return true;
 }
 
-app.post('/gimmie', (req, res) => {
-  let recipient = req.body.address;
-  // TODO: check ip address not blacklisted 
-  let ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress; // request addres or if its behind proxy
-  ip = ip.replace(/\./g, "_");
+/// checking IPs, IP gets listed 
+let addServedIp = function (ip) {
+    ipServed.push({ ip: ip, time: Date.now() });
+};
+let checkServedIp = function (ip) {
+    return ipServed.findIndex(o => {
+        return o.ip === ip;
+    });
+};
+let removeIp = function (index) {
+    ipServed.splice(index, 1);
+};
+let removeOldIps = function () {
+    let now = Date.now();
+    let numServed = ipServed.length;
+    for (var i = numServed; i >= 0; --i) {
+        let obj = ipServed[i];
+        if (obj.time + ipRefuseDuration < now)
+            removeIp(i);
+    }
+};
 
-  // check if account was already funded
-  let notFoundedYet = viable(recipient); // so receiver did not receive any funds yet from this faucet, 
-  if (!notFoundedYet)
-  {
+app.get('/served', (req, res) => {
+    removeOldIps();
+    res.send({
+        result: true,
+        served: ipServed
+    }).catch(error => {
+        res.status(500).send({
+            result: false,
+            error: error
+        });
+    });  
+});
+
+app.post('/gimmie', (req, res) => {
+    let recipient = req.body.address;
+
+    // TODO: check ip address not blacklisted 
+    let ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress; // request addres or if its behind proxy
+    ip = ip.replace(/\./g, "_");
+
+    let servedIdx = checkServedIp(ip);
+    if (servedIdx !== -1) {
+        let now = Date.now(); 
+        let obj = ipServed[servedIdx];
+        if (obj.time + ipRefuseDuration > now) { 
+            res.status(500).send({
+                result: false,
+                error: "blacklisted ip"
+            });
+            return; // served and time still didn't pass
+        } 
+        removeIp(servedIdx); // time passed remove from served list
+    }
+
+    // check if account was already funded
+    let notFoundedYet = viable(recipient); // so receiver did not receive any funds yet from this faucet, 
+    if (!notFoundedYet)
+    {
       res.status(500).send({
           result: false,
           error: "not viable, already funded"
       });
-      return;
-  }
+      return; //
+    }
 
-  console.log('requested: ' + recipient);
-  gimmieEth(privateKey, recipient, dripAmt).then((tx)=>{
+
+    removeOldIps();
+    // all good 
+    addServedIp(ip);
+
+    console.log('requested: ' + recipient);
+    gimmieEth(privateKey, recipient, dripAmt).then((tx)=>{
     res.send({
-      result: true,
-      gifted: utils.formatEther(dripAmt),
-      transaction: tx.hash
+        result: true,
+        gifted: utils.formatEther(dripAmt),
+        transaction: tx.hash
     });
-  }).catch(error => {
+    }).catch(error => {
     res.status(500).send({
-      result: false,
-      error: error
+        result: false,
+        error: error
     });
-  });
+    });
 });
 
 app.listen(port, () => console.log(`Faucet dripping on port ${port}!`));
