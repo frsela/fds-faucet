@@ -93,6 +93,7 @@ let viable = function (remoteAddress) // slow, will fail
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////// check served ips
 /// checking IPs, IP gets listed 
 let addServedIp = function (ip) {
     ipServed.push({ ip: ip, time: Date.now() });
@@ -127,6 +128,7 @@ app.get('/served', (req, res) => {
         });
     });  
 });
+////////////////////////////////////////////////////////////////////////////////// 
 
 app.post('/gimmie', (req, res) => {
     let recipient = req.body.address;
