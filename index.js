@@ -33,39 +33,56 @@ const port = process.env.PORT || '3001';
 
 var redis = require('redis');
 var client = redis.createClient(process.env.REDIS_URL);
+console.log(process.env.REDIS_URL)
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
-let incrementNonce = ()=>{
-  return new Promise((resolve, reject)=>{
-    client.get("current_nonce", (value)=>{
-      debugger;
-    });
-  });
-};
+// let getNonce = ()=>{
+//   return new Promise((resolve, reject)=>{
+//     client.get("current_nonce", (value)=>{
+//       console.log('v', value)
+//       resolve(value);
+//     });
+//   });
+// };
+
+// let setNonce  = (nonce)=>{
+//   return new Promise((resolve, reject)=>{
+//     console.log(nonce) 
+//     client.set("current_nonce", 'test', (err,v)=>{resolve(v)});
+//   });  
+// }
+
+
+
+// let startNonce = 40;
+
+// getNonce().then((nonce)=>{
+//   console.log(nonce)
+//   let newNonce = nonce === null ? startNonce : nonce + 1;
+//   console.log(nonce, newNonce)
+//   setNonce(newNonce).then((res)=>{
+//     console.log('done')
+//   });
+// })
 
 let gimmieEth = function(privateKey, address, amt){
   return new Promise((resolve, reject) => {
     let wallet = new ethers.Wallet(privateKey, provider);
 
-
-
-
-    return provider.getTransactionCount(wallet.address).then((transactionCount) => {
-      console.log('txs', transactionCount);
-      console.log('nonce', transactionCount+2)
+    return client.incr('current-nonce',(err,v)=>{
+      if(err){reject(err)};
+      console.log('nonce', v);
       let transaction = {
           gas: 4712388,
           gasLimit: 50000,
           gasPrice: 100000000000,
           to: address,
           value: amt,
-          nonce: transactionCount
+          nonce: v
       }
-
       let signPromise = wallet.sign(transaction);
-
       return signPromise.then((signedTransaction) => {
           return provider.sendTransaction(signedTransaction).then((tx) => {
               console.log('sent', tx);
@@ -85,6 +102,12 @@ let gimmieEth = function(privateKey, address, amt){
             return
           });
       });
+
+    });
+
+    return provider.getTransactionCount(wallet.address).then((transactionCount) => {
+
+
     });
   });
 };
