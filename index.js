@@ -38,42 +38,14 @@ console.log(process.env.REDIS_URL)
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
-// let getNonce = ()=>{
-//   return new Promise((resolve, reject)=>{
-//     client.get("current_nonce", (value)=>{
-//       console.log('v', value)
-//       resolve(value);
-//     });
-//   });
-// };
-
-// let setNonce  = (nonce)=>{
-//   return new Promise((resolve, reject)=>{
-//     console.log(nonce) 
-//     client.set("current_nonce", 'test', (err,v)=>{resolve(v)});
-//   });  
-// }
-
-
-
-// let startNonce = 40;
-
-// getNonce().then((nonce)=>{
-//   console.log(nonce)
-//   let newNonce = nonce === null ? startNonce : nonce + 1;
-//   console.log(nonce, newNonce)
-//   setNonce(newNonce).then((res)=>{
-//     console.log('done')
-//   });
-// })
-
-let gimmieEth = function(privateKey, address, amt){
+let gimmieEth = function(privateKey, address, amt, reset){
   return new Promise((resolve, reject) => {
     let wallet = new ethers.Wallet(privateKey, provider);
 
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
       console.log('nonce', v);
+      if(reset){nonce = 0};
       let transaction = {
           gas: 4712388,
           gasLimit: 50000,
@@ -90,7 +62,7 @@ let gimmieEth = function(privateKey, address, amt){
                 provider.getTransaction(tx.hash).then((gotTx)=>{
                   console.log(tx.hash, gotTx.confirmations);
                   if(gotTx.confirmations > 0){
-                    console.log(tx, 'confirmed')
+                    console.log('confirmed', tx)
                     clearInterval(checkInterval);
                   }
                 })
@@ -103,19 +75,15 @@ let gimmieEth = function(privateKey, address, amt){
           });
       });
 
-    });
-
-    return provider.getTransactionCount(wallet.address).then((transactionCount) => {
-
-
-    });
+    }); 
   });
 };
 
 app.post('/gimmie', (req, res) => {
   let recipient = req.body.address;
+  let reset = req.body.reset_nonce === 'true';
   console.log('requested: ' + recipient)
-  gimmieEth(privateKey, recipient, dripAmt).then((tx)=>{
+  gimmieEth(privateKey, recipient, dripAmt, reset).then((tx)=>{
     res.send({
       result: true,
       gifted: utils.formatEther(dripAmt),
