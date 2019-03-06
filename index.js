@@ -44,8 +44,8 @@ let gimmieEth = function(privateKey, address, amt, reset){
 
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
+      if(reset){v = 0};
       console.log('nonce', v);
-      if(reset){nonce = 0};
       let transaction = {
           gas: 4712388,
           gasLimit: 50000,
