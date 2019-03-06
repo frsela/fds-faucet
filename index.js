@@ -101,10 +101,10 @@ app.post('/reset', (req, res) => {
   if(req.body.token === token){
     return new Promise((resolve, reject)=>{
       console.log('resetting nonce') 
-      client.set("current-nonce", 0, (err,v)=>{resolve(v)});
-    }).then(()=>{
-      res.send({
-        result: true
+      client.set("current-nonce", 0, (err,v)=>{
+        res.send({
+          result: true
+        });
       });
     }); 
   }
