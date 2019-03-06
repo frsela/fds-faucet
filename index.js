@@ -44,7 +44,6 @@ let gimmieEth = function(privateKey, address, amt, reset){
 
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
-      if(reset){v = 0};
       console.log('nonce', v);
       let transaction = {
           gas: 4712388,
@@ -95,6 +94,20 @@ app.post('/gimmie', (req, res) => {
       error: error
     });
   });
+});
+
+app.post('/reset', (req, res) => {
+  let token = process.env.RESET_TOKEN;
+  if(req.body.token === token){
+    return new Promise((resolve, reject)=>{
+      console.log('resetting nonce') 
+      client.set("current-nonce", 0, (err,v)=>{resolve(v)});
+    }).then(()=>{
+      res.send({
+        result: true
+      });
+    }); 
+  }
 });
 
 app.listen(port, () => console.log(`Faucet dripping on port ${port}!`));
