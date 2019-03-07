@@ -38,9 +38,10 @@ console.log(process.env.REDIS_URL)
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
+let wallet = new ethers.Wallet(privateKey, provider);
+
 let gimmieEth = function(privateKey, address, amt, reset){
   return new Promise((resolve, reject) => {
-    let wallet = new ethers.Wallet(privateKey, provider);
 
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
@@ -51,7 +52,7 @@ let gimmieEth = function(privateKey, address, amt, reset){
           gasPrice: 100000000000,
           to: address,
           value: amt,
-          nonce: v
+          nonce: v-1
       }
       let signPromise = wallet.sign(transaction);
       return signPromise.then((signedTransaction) => {
@@ -99,14 +100,19 @@ app.post('/gimmie', (req, res) => {
 app.post('/reset', (req, res) => {
   let token = process.env.RESET_TOKEN;
   if(req.body.token === token){
-    return new Promise((resolve, reject)=>{
-      console.log('resetting nonce') 
-      client.set("current-nonce", 0, (err,v)=>{
-        res.send({
-          result: true
+    return provider.getTransactionCount(wallet.address).then((transactionCount) => {
+      let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : transactionCount;
+      return new Promise((resolve, reject)=>{
+        console.log('resetting nonce') 
+        client.set("current-nonce", nonce, (err,v)=>{
+          res.send({
+            result: true,
+            newNonce: nonce,
+            transactionCount: transactionCount
+          });
         });
-      });
-    }); 
+      }); 
+    });
   }
 });
 
