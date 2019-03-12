@@ -129,6 +129,10 @@ app.post('/reset', (req, res) => {
         });
       }); 
     });
+  }else{
+    res.status(500).send({
+      result: false,
+    });    
   }
 });
 
