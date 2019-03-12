@@ -80,7 +80,7 @@ let gimmieEth = function(privateKey, address, amt, reset){
 };
 
 app.get('/',(req, res) => {
-  let token = process.env.AUTH_TOKEN;
+  let token = process.env.AUTH_TOKEN.substr(-10);
   if(req.body.token === token){  
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
         res.send({
