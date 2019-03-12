@@ -79,6 +79,22 @@ let gimmieEth = function(privateKey, address, amt, reset){
   });
 };
 
+app.get('/',(req, res) => {
+  let token = process.env.RESET_TOKEN;
+  if(req.body.token === token){  
+    return provider.getTransactionCount(wallet.address).then((transactionCount) => {
+        res.send({
+          dripAmt: process.env.DRIP_AMT,
+          transactionCount: transactionCount
+        });
+      });
+  }else{
+    res.send({
+      dripAmt: process.env.DRIP_AMT
+    });
+  }
+});
+
 app.post('/gimmie', (req, res) => {
   let recipient = req.body.address;
   let reset = req.body.reset_nonce === 'true';
