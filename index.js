@@ -80,7 +80,7 @@ let gimmieEth = function(privateKey, address, amt, reset){
 };
 
 app.get('/',(req, res) => {
-  let token = process.env.RESET_TOKEN;
+  let token = process.env.AUTH_TOKEN;
   if(req.body.token === token){  
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
         res.send({
@@ -114,7 +114,7 @@ app.post('/gimmie', (req, res) => {
 });
 
 app.post('/reset', (req, res) => {
-  let token = process.env.RESET_TOKEN;
+  let token = process.env.AUTH_TOKEN;
   if(req.body.token === token){
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
       let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : transactionCount;
