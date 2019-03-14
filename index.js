@@ -81,7 +81,7 @@ let gimmieEth = function(privateKey, address, amt, reset){
 
 app.get('/',(req, res) => {
   let token = process.env.AUTH_TOKEN.substr(-10);
-  if(req.body.token === token){  
+  if(req.body.token && req.body.token === token){  
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
         res.send({
           dripAmt: process.env.DRIP_AMT,
