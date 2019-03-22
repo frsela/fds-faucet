@@ -40,6 +40,11 @@ app.use(cors());
 
 let wallet = new ethers.Wallet(privateKey, provider);
 
+wallet.getBalance().then((balance)=>{
+  console.log(process.env.ETH_GATEWAY);
+  console.log(wallet.address, balance.toString());
+});
+
 let gimmieEth = function(privateKey, address, amt, reset){
   return new Promise((resolve, reject) => {
 
@@ -62,12 +67,12 @@ let gimmieEth = function(privateKey, address, amt, reset){
                 provider.getTransaction(tx.hash).then((gotTx)=>{
                   console.log(tx.hash, gotTx.confirmations);
                   if(gotTx.confirmations > 0){
-                    console.log('confirmed', tx)
+                    console.log('confirmed', tx);
                     clearInterval(checkInterval);
+                    resolve(tx);                    
                   }
                 })
               },3000);
-              resolve(tx);
               return;
           }).catch((error)=>{
             reject(error.message);
@@ -119,7 +124,7 @@ app.post('/reset', (req, res) => {
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
       let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : transactionCount;
       return new Promise((resolve, reject)=>{
-        console.log('resetting nonce') 
+        console.log('resetting nonce to ', nonce);
         client.set("current-nonce", nonce, (err,v)=>{
           res.send({
             result: true,
