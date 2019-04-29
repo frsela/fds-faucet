@@ -100,7 +100,10 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
           }).catch((error)=>{
             clearInterval(checkInterval);
             console.log(`failed    ${gimmieID} ${error} ${error.code}`);
-            if(error.code === 'NONCE_EXPIRED'){
+            if(
+              error.code === 'NONCE_EXPIRED' || 
+              error.code === '-32000' //known transaction
+            ){
               if(resetsRemaining === 0){
                 reject(error);
               }else{
