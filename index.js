@@ -99,10 +99,10 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
             return;
           }).catch((error)=>{
             clearInterval(checkInterval);
-            console.log(`failed    ${gimmieID} ${error}`);
+            console.log(`failed    ${gimmieID} ${error} ${error.code}`);
             if(error.code === 'NONCE_EXPIRED'){
               if(resetsRemaining === 0){
-                reject(message);
+                reject(error);
               }else{
                 resetNonce().then(()=>{
                   gimmieEth(privateKey, address, amt, reset, maxTries, gimmieID, resetsRemaining - 1).then((tx)=>{
