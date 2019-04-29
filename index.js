@@ -20,6 +20,7 @@ let express = require('express');
 let bodyParser = require('body-parser');
 let ethers = require('ethers');
 let cors = require('cors');
+let crypto = require("crypto");
 
 let utils = ethers.utils;
 
@@ -45,12 +46,15 @@ wallet.getBalance().then((balance)=>{
   console.log(wallet.address, balance.toString());
 });
 
-let gimmieEth = function(privateKey, address, amt, reset){
+let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieID = false, resetsRemaining = 10){
+  if(gimmieID === false){
+    gimmieID = crypto.randomBytes(20).toString('hex');
+  }
+  console.log(`requested ${gimmieID} ${address}`);
   return new Promise((resolve, reject) => {
 
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
-      console.log('nonce', v);
       let transaction = {
           gas: 4712388,
           gasLimit: 50000,
@@ -61,21 +65,52 @@ let gimmieEth = function(privateKey, address, amt, reset){
       }
       let signPromise = wallet.sign(transaction);
       return signPromise.then((signedTransaction) => {
-          return provider.sendTransaction(signedTransaction).then((tx) => {
-              console.log('sent', tx);
-              let checkInterval = setInterval(()=>{
+          let tries = 0;
+          let checkInterval;
+          let tx;
+          return provider.sendTransaction(signedTransaction).then((transaction) => {
+            tx = transaction
+            console.log(`sent      ${tx.hash}`);
+            checkInterval = setInterval(()=>{
+              if(tries <= maxTries){
                 provider.getTransaction(tx.hash).then((gotTx)=>{
-                  console.log(tx.hash, gotTx.confirmations);
                   if(gotTx.confirmations > 0){
-                    console.log('confirmed', tx);
+                    console.log(`confirmed ${tx.hash}`);                      
                     clearInterval(checkInterval);
-                    resolve(tx);                    
+                    resolve(tx);
                   }
-                })
-              },3000);
-              return;
+                });
+                tries+=1;
+              }else{
+                clearInterval(checkInterval);                
+                let message = 'Error: max tries exceeded';
+                console.log(`failed     ${gimmieID} ${tx.hash} ${message}`);
+                if(resetsRemaining === 0){
+                  reject(message);
+                }else{
+                  resetNonce().then(()=>{
+                    gimmieEth(privateKey, address, amt, reset, maxTries, gimmieID, resetsRemaining - 1).then((tx)=>{
+                      resolve(tx);
+                    });
+                  });
+                }
+              }
+            },1000);
+            return;
           }).catch((error)=>{
-            reject(error.message);
+            clearInterval(checkInterval);
+            console.log(`failed    ${gimmieID} ${error}`);
+            if(error.code === 'NONCE_EXPIRED'){
+              if(resetsRemaining === 0){
+                reject(message);
+              }else{
+                resetNonce().then(()=>{
+                  gimmieEth(privateKey, address, amt, reset, maxTries, gimmieID, resetsRemaining - 1).then((tx)=>{
+                    resolve(tx);
+                  });
+                });
+              }
+            }
             return
           });
       });
@@ -83,6 +118,22 @@ let gimmieEth = function(privateKey, address, amt, reset){
     }); 
   });
 };
+
+let resetNonce = (nonce) => {
+  return provider.getTransactionCount(wallet.address).then((transactionCount) => {
+    return new Promise((resolve, reject)=>{
+      let n = nonce ? nonce : transactionCount ;
+      console.log('resetting nonce to ', n);
+      client.set("current-nonce", n, (err,v)=>{
+        resolve({
+          result: true,
+          newNonce: n,
+          transactionCount: transactionCount
+        });
+      });
+    });       
+  });
+}
 
 app.get('/',(req, res) => {
   let token = process.env.AUTH_TOKEN.substr(-10);
@@ -103,7 +154,6 @@ app.get('/',(req, res) => {
 app.post('/gimmie', (req, res) => {
   let recipient = req.body.address;
   let reset = req.body.reset_nonce === 'true';
-  console.log('requested: ' + recipient)
   gimmieEth(privateKey, recipient, dripAmt, reset).then((tx)=>{
     res.send({
       result: true,
@@ -120,6 +170,7 @@ app.post('/gimmie', (req, res) => {
 
 app.post('/reset', (req, res) => {
   let token = process.env.AUTH_TOKEN;
+    let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : false;  
   if(req.body.token === token){
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
       let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : transactionCount;
