@@ -4,7 +4,8 @@
   "description": "give a little bit of eth",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
   },
   "author": "significance",
   "license": "ISC",
@@ -17,6 +18,6 @@
     "express": "^4.16.3",
     "pg": "^7.5.0",
     "redis": "^2.8.0",
-    "web3": "^1.0.0-beta.36"
+    "web3": "^1.2.0"
   }
 }
