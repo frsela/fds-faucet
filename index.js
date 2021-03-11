@@ -62,6 +62,7 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
           value: amt,
           nonce: v-1
       }
+      console.log(transaction)
       let signPromise = wallet.signTransaction(transaction);
       return signPromise.then((signedTransaction) => {
           let tries = 0;
