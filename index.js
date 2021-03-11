@@ -56,14 +56,13 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
     return client.incr('current-nonce',(err,v)=>{
       if(err){reject(err)};
       let transaction = {
-          gas: 4712388,
           gasLimit: 50000,
           gasPrice: 100000000000,
           to: address,
           value: amt,
           nonce: v-1
       }
-      let signPromise = wallet.sign(transaction);
+      let signPromise = wallet.signTransaction(transaction);
       return signPromise.then((signedTransaction) => {
           let tries = 0;
           let checkInterval;
