@@ -58,6 +58,9 @@ const tokenABI = [
 ];
 
 const maxSprinkles = 7;
+const maxConfirmationTries = 30;
+const confirmationInterval = 5000;
+const gbzzToSend = "100000000000000000";
 
 let tokenAddress = '0x2ac3c1d3e24b45c6c310534bc2dd84b5ed576335';
 
@@ -66,7 +69,8 @@ var redis = require('redis');
 var client = redis.createClient(process.env.REDIS_URL);
 // console.log(process.env.REDIS_URL)
 
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json())
 app.use(cors());
 
 let wallet = new ethers.Wallet(privateKey, provider);
@@ -81,14 +85,12 @@ wallet.getBalance().then((balance)=>{
 let incrementDiscordUserCount = async (discordUser) => {
   client.incr('discordUserCount-'+discordUser, (err,res)=>{
     if(err !== null) throw new Error(err);
-    console.log(`incremented ${discordUser} nonce`, res)
   })
 }
 
 let decrementDiscordUserCount = async (discordUser) => {
   client.decr('discordUserCount-'+discordUser, (err,res)=>{
     if(err !== null) throw new Error(err);
-    console.log(`decremented ${discordUser} nonce`, res)
   })
 }
 
@@ -96,53 +98,66 @@ let getDiscordUserCount = async (discordUser) => {
   return await new Promise((resolve,reject)=>{
     client.get('discordUserCount-'+discordUser, (err,res)=>{
       if(err !== null ) reject(err);
-      console.log(err,res)
+      resolve(parseInt(res));
+    })
+  });
+}
+
+let setDiscordUserCount = async (discordUser, count) => {
+  return await new Promise((resolve,reject)=>{
+    client.set('discordUserCount-'+discordUser, count, (err,res)=>{
+      if(err !== null ) reject(err);
       resolve(parseInt(res));
     })
   });
 }
 
 
+
 let incrementNonce = async () => {
   client.incr('current-nonce', (err,res)=>{
     if(err !== null) throw new Error(err);
-    console.log("incremented nonce", res)
   })
 }
 
 let decrementNonce = async () => {
   client.decr('current-nonce', (err,res)=>{
     if(err !== null) throw new Error(err);
-    console.log("decremented nonce", res)
   })
 }
 
-let waitForConfirmation = async (tx, tries = 20) => {
+let waitForConfirmation = async (tx) => {
   let didTry = 0;
   return new Promise((resolve, reject) => {
     let checkInterval = setInterval(()=>{
-      console.log(didTry, tx)
-      if(didTry > tries){
+      if(didTry > maxConfirmationTries){
         decrementNonce();
-        decrementDiscordUserCount(discordUser);
-        reject(tx);
+        clearInterval(checkInterval);
+        reject(new Error("could not confirm transaction"));
       }
       didTry += 1
       provider.getTransaction(tx.hash).then((gotTx)=>{
         if(gotTx.confirmations > 0){
-            console.log(`confirmed ${tx.hash}`);                      
             clearInterval(checkInterval);
             resolve(tx);
           }
       });
-    }, 5000);
+    }, confirmationInterval);
   })
 }
 
 let gimmie = async (address, amt, discordUser = false) => {
   let gimmieID = crypto.randomBytes(20).toString('hex');
-  console.log(`requested ${gimmieID} ${address} ${discordUser}`);
   
+  let discordUserCount = await getDiscordUserCount(discordUser)
+  
+  console.log(`requested ${gimmieID} ${address} ${discordUser} ${discordUserCount}`);
+
+  if(discordUserCount > maxSprinkles){
+    console.log(`rejected  ${gimmieID} ${address} ${discordUser} - too many sprinkles`);
+    throw new Error(`sorry, user '${discordUser}' has already sprinkled ${maxSprinkles} times, see .`);
+  }
+
   let nonce = await new Promise((resolve,reject)=>{
     client.get('current-nonce', (err,res)=>{
       if(err !== null ) reject(err);
@@ -159,7 +174,7 @@ let gimmie = async (address, amt, discordUser = false) => {
   }
 
 
-  let sendGbzzTx = await gbzz.populateTransaction.transfer("0x8A9b99F214BB407bE10f3c1fD1ca0ae0B8cb2b92", "100000000000000000");
+  let sendGbzzTx = await gbzz.populateTransaction.transfer(address, gbzzToSend);
   sendGbzzTx.gasLimit = 200000;
   sendGbzzTx.gasPrice = 100000000000;
   sendGbzzTx.nonce = nonce+1
@@ -167,6 +182,7 @@ let gimmie = async (address, amt, discordUser = false) => {
   let sendEthTxSigned = await wallet.signTransaction(sendEthTx);
   let sendGbzzTxSigned = await wallet.signTransaction(sendGbzzTx);
 
+  console.log(`sent      ${gimmieID} ${address} ${discordUser} ${discordUserCount}`);
 
   let tx1 = provider.sendTransaction(sendEthTxSigned);
   let tx2 = provider.sendTransaction(sendGbzzTxSigned)
@@ -180,12 +196,18 @@ let gimmie = async (address, amt, discordUser = false) => {
 
   let txo = await Promise.all([tx1, tx2]);
 
-
-  let c1 = waitForConfirmation(txo[0]);
-  let c2 = waitForConfirmation(txo[1]);
+  let c1,c2;
+  try {
+    c1 = waitForConfirmation(txo[0]);
+    c2 = waitForConfirmation(txo[1]);
+  } catch (e) {
+    console.log(e)
+    decrementDiscordUserCount(discordUser);
+  }
 
   let txc = await Promise.all([c1, c2]);
 
+  console.log(`confirmed ${gimmieID} ${address} ${discordUser} ${discordUserCount}`);
 
   return txo;
 
@@ -224,55 +246,39 @@ app.get('/',(req, res) => {
 });
 
 
-app.post('/gimmie-d', async (req, res) => {
+app.post('/gimmie', async (req, res) => {
   let recipient = req.body.address;
   let discordUser = req.body.user;
-
-  let discordUserCount = await getDiscordUserCount(discordUser)
-  
-  if(discordUserCount > maxSprinkles){
-    res.status(500).send({
-      result: false,
-      error: `sorry, ${discordUser} has already sprinkled ${maxSprinkles} times.`
-    });
-    return;
-  }
   try {
     let result = await gimmie(recipient, dripAmt, discordUser);
 
     res.send({
       result: true,
       gifted: utils.formatEther(dripAmt),
-      // transaction: tx.hash
     });
   } catch(e) {
     res.status(500).send({
       result: false,
-      error: e
+      error: e.message
     });
   }
 });
 
-app.post('/gimmie', async (req, res) => {
-  let recipient = req.body.address;
-  let discordUser = req.body.discordUser;
-  try {
-    let result = await gimmie(recipient, dripAmt);
 
+app.post('/reset-user', async (req, res) => {
+  let token = process.env.AUTH_TOKEN;
+  let discordUser = req.body.user;
+  if(req.body.token === token){
+    await setDiscordUserCount(discordUser, 0);
     res.send({
-      result: true,
-      gifted: utils.formatEther(dripAmt),
-      // transaction: tx.hash
+      result: true
     });
-  } catch(e) {
+  }else{
     res.status(500).send({
       result: false,
-      error: e
     });
   }
 });
-
-
 
 app.post('/reset', (req, res) => {
   let token = process.env.AUTH_TOKEN;
