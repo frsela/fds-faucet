@@ -32,94 +32,163 @@ let dripAmt = utils.parseEther(process.env.DRIP_AMT);
 const app = express();
 const port = process.env.PORT || '3001';
 
+const tokenABI = [
+  // transfer
+  {
+   "constant": false,
+   "inputs": [
+    {
+     "name": "_to",
+     "type": "address"
+    },
+    {
+     "name": "_value",
+     "type": "uint256"
+    }
+   ],
+   "name": "transfer",
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool"
+    }
+   ],
+   "type": "function"
+  }
+];
+
+const maxSprinkles = 7;
+
+let tokenAddress = '0x2ac3c1d3e24b45c6c310534bc2dd84b5ed576335';
+
+
 var redis = require('redis');
 var client = redis.createClient(process.env.REDIS_URL);
-console.log(process.env.REDIS_URL)
+// console.log(process.env.REDIS_URL)
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
 let wallet = new ethers.Wallet(privateKey, provider);
 
+let gbzz = new ethers.Contract( tokenAddress , tokenABI , provider )
+
 wallet.getBalance().then((balance)=>{
   console.log(process.env.ETH_GATEWAY);
   console.log(wallet.address, balance.toString());
 });
 
-let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieID = false, resetsRemaining = 10){
-  if(gimmieID === false){
-    gimmieID = crypto.randomBytes(20).toString('hex');
-  }
-  console.log(`requested ${gimmieID} ${address}`);
-  return new Promise((resolve, reject) => {
+let incrementDiscordUserCount = async (discordUser) => {
+  client.incr('discordUserCount-'+discordUser, (err,res)=>{
+    if(err !== null) throw new Error(err);
+    console.log(`incremented ${discordUser} nonce`, res)
+  })
+}
 
-    return client.incr('current-nonce',(err,v)=>{
-      if(err){reject(err)};
-      let transaction = {
-          gasLimit: 50000,
-          gasPrice: 100000000000,
-          to: address,
-          value: amt,
-          nonce: v-1
-      }
-      console.log(transaction)
-      let signPromise = wallet.signTransaction(transaction);
-      return signPromise.then((signedTransaction) => {
-          let tries = 0;
-          let checkInterval;
-          let tx;
-          return provider.sendTransaction(signedTransaction).then((transaction) => {
-            tx = transaction
-            console.log(`sent      ${tx.hash}`);
-            checkInterval = setInterval(()=>{
-              if(tries <= maxTries){
-                provider.getTransaction(tx.hash).then((gotTx)=>{
-                  if(gotTx.confirmations > 0){
-                    console.log(`confirmed ${tx.hash}`);                      
-                    clearInterval(checkInterval);
-                    resolve(tx);
-                  }
-                });
-                tries+=1;
-              }else{
-                clearInterval(checkInterval);                
-                let message = 'Error: max tries exceeded';
-                console.log(`failed     ${gimmieID} ${tx.hash} ${message}`);
-                if(resetsRemaining === 0){
-                  reject(message);
-                }else{
-                  resetNonce().then(()=>{
-                    gimmieEth(privateKey, address, amt, reset, maxTries, gimmieID, resetsRemaining - 1).then((tx)=>{
-                      resolve(tx);
-                    });
-                  });
-                }
-              }
-            },1000);
-            return;
-          }).catch((error)=>{
-            clearInterval(checkInterval);
-            console.log(`failed    ${gimmieID} ${error} ${error.code}`);
-            if(
-              error.code === 'NONCE_EXPIRED' || 
-              error.code === '-32000' //known transaction
-            ){
-              if(resetsRemaining === 0){
-                reject(error);
-              }else{
-                resetNonce().then(()=>{
-                  gimmieEth(privateKey, address, amt, reset, maxTries, gimmieID, resetsRemaining - 1).then((tx)=>{
-                    resolve(tx);
-                  });
-                });
-              }
-            }
-            return
-          });
-      });
+let decrementDiscordUserCount = async (discordUser) => {
+  client.decr('discordUserCount-'+discordUser, (err,res)=>{
+    if(err !== null) throw new Error(err);
+    console.log(`decremented ${discordUser} nonce`, res)
+  })
+}
 
-    }); 
+let getDiscordUserCount = async (discordUser) => {
+  return await new Promise((resolve,reject)=>{
+    client.get('discordUserCount-'+discordUser, (err,res)=>{
+      if(err !== null ) reject(err);
+      console.log(err,res)
+      resolve(parseInt(res));
+    })
   });
+}
+
+
+let incrementNonce = async () => {
+  client.incr('current-nonce', (err,res)=>{
+    if(err !== null) throw new Error(err);
+    console.log("incremented nonce", res)
+  })
+}
+
+let decrementNonce = async () => {
+  client.decr('current-nonce', (err,res)=>{
+    if(err !== null) throw new Error(err);
+    console.log("decremented nonce", res)
+  })
+}
+
+let waitForConfirmation = async (tx, tries = 20) => {
+  let didTry = 0;
+  return new Promise((resolve, reject) => {
+    let checkInterval = setInterval(()=>{
+      console.log(didTry, tx)
+      if(didTry > tries){
+        decrementNonce();
+        decrementDiscordUserCount(discordUser);
+        reject(tx);
+      }
+      didTry += 1
+      provider.getTransaction(tx.hash).then((gotTx)=>{
+        if(gotTx.confirmations > 0){
+            console.log(`confirmed ${tx.hash}`);                      
+            clearInterval(checkInterval);
+            resolve(tx);
+          }
+      });
+    }, 5000);
+  })
+}
+
+let gimmie = async (address, amt, discordUser = false) => {
+  let gimmieID = crypto.randomBytes(20).toString('hex');
+  console.log(`requested ${gimmieID} ${address} ${discordUser}`);
+  
+  let nonce = await new Promise((resolve,reject)=>{
+    client.get('current-nonce', (err,res)=>{
+      if(err !== null ) reject(err);
+      resolve(parseInt(res));
+    })
+  });
+
+  let sendEthTx = {
+    gasLimit: 50000,
+    gasPrice: 100000000000,
+    to: address,
+    value: amt,
+    nonce: nonce
+  }
+
+
+  let sendGbzzTx = await gbzz.populateTransaction.transfer("0x8A9b99F214BB407bE10f3c1fD1ca0ae0B8cb2b92", "100000000000000000");
+  sendGbzzTx.gasLimit = 200000;
+  sendGbzzTx.gasPrice = 100000000000;
+  sendGbzzTx.nonce = nonce+1
+
+  let sendEthTxSigned = await wallet.signTransaction(sendEthTx);
+  let sendGbzzTxSigned = await wallet.signTransaction(sendGbzzTx);
+
+
+  let tx1 = provider.sendTransaction(sendEthTxSigned);
+  let tx2 = provider.sendTransaction(sendGbzzTxSigned)
+
+  incrementNonce();
+  incrementNonce();
+
+  if(discordUser){
+    incrementDiscordUserCount(discordUser);    
+  }
+
+  let txo = await Promise.all([tx1, tx2]);
+
+
+  let c1 = waitForConfirmation(txo[0]);
+  let c2 = waitForConfirmation(txo[1]);
+
+  let txc = await Promise.all([c1, c2]);
+
+
+  return txo;
+
 };
 
 let resetNonce = (nonce) => {
@@ -154,22 +223,56 @@ app.get('/',(req, res) => {
   }
 });
 
-app.post('/gimmie', (req, res) => {
+
+app.post('/gimmie-d', async (req, res) => {
   let recipient = req.body.address;
-  let reset = req.body.reset_nonce === 'true';
-  gimmieEth(privateKey, recipient, dripAmt, reset).then((tx)=>{
+  let discordUser = req.body.user;
+
+  let discordUserCount = await getDiscordUserCount(discordUser)
+  
+  if(discordUserCount > maxSprinkles){
+    res.status(500).send({
+      result: false,
+      error: `sorry, ${discordUser} has already sprinkled ${maxSprinkles} times.`
+    });
+    return;
+  }
+  try {
+    let result = await gimmie(recipient, dripAmt, discordUser);
+
     res.send({
       result: true,
       gifted: utils.formatEther(dripAmt),
-      transaction: tx.hash
+      // transaction: tx.hash
     });
-  }).catch(error => {
+  } catch(e) {
     res.status(500).send({
       result: false,
-      error: error
+      error: e
     });
-  });
+  }
 });
+
+app.post('/gimmie', async (req, res) => {
+  let recipient = req.body.address;
+  let discordUser = req.body.discordUser;
+  try {
+    let result = await gimmie(recipient, dripAmt);
+
+    res.send({
+      result: true,
+      gifted: utils.formatEther(dripAmt),
+      // transaction: tx.hash
+    });
+  } catch(e) {
+    res.status(500).send({
+      result: false,
+      error: e
+    });
+  }
+});
+
+
 
 app.post('/reset', (req, res) => {
   let token = process.env.AUTH_TOKEN;
@@ -191,7 +294,7 @@ app.post('/reset', (req, res) => {
   }else{
     res.status(500).send({
       result: false,
-    });    
+    });
   }
 });
 
