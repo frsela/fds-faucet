@@ -125,6 +125,30 @@ let decrementNonce = async () => {
   })
 }
 
+let addToRightlist = async (user) => {
+  client.sadd('rightlisted-users', user, (err,res)=>{
+    if(err !== null) throw new Error(err);
+    console.log(res)
+  })
+}
+
+let getRightList = async (user) => {
+  return await new Promise((resolve,reject)=>{
+    client.smembers('rightlisted-users', (err,res)=>{
+      if(err !== null ) reject(err);
+      resolve(res);
+    })
+  });
+}
+
+let isOnRightList = async (user) => {
+  client.sismember('rightlisted-users', user, (err,res)=>{
+    if(err !== null) throw new Error(err);
+    return res === 1
+  })
+}
+
+
 let waitForConfirmation = async (tx) => {
   let didTry = 0;
   return new Promise((resolve, reject) => {
@@ -147,15 +171,20 @@ let waitForConfirmation = async (tx) => {
 
 let gimmie = async (address, amt, discordUser = false) => {
   let gimmieID = crypto.randomBytes(20).toString('hex');
+
+  let rightListed = isOnRightList(discordUser);
   
-  let discordUserCount = await getDiscordUserCount(discordUser)
-  
+  let discordUserCount = await getDiscordUserCount(discordUser);
+
   console.log(`requested ${gimmieID} ${address} ${discordUser} ${discordUserCount}`);
 
-  if(discordUserCount > maxSprinkles){
-    console.log(`rejected  ${gimmieID} ${address} ${discordUser} - too many sprinkles`);
-    throw new Error(`sorry, user '${discordUser}' has already sprinkled ${maxSprinkles} times, see .`);
+  if(rightListed !== true){
+    if(discordUserCount > maxSprinkles){
+      console.log(`rejected  ${gimmieID} ${address} ${discordUser} - too many sprinkles`);
+      throw new Error(`sorry, user '${discordUser}' has already sprinkled ${maxSprinkles} times, see .`);
+    }
   }
+  
 
   let nonce = await new Promise((resolve,reject)=>{
     client.get('current-nonce', (err,res)=>{
@@ -265,6 +294,36 @@ app.post('/gimmie', async (req, res) => {
   }
 });
 
+
+app.post('/rightlist', async (req, res) => {
+  let token = process.env.AUTH_TOKEN;
+  let discordUser = req.body.user;
+  if(req.body.token === token){
+    let rightlist = await getRightList();
+    res.send({
+      result: rightlist
+    });
+  }else{
+    res.status(500).send({
+      result: false,
+    });
+  }
+});
+
+app.post('/rightlist-user', async (req, res) => {
+  let token = process.env.AUTH_TOKEN;
+  let discordUser = req.body.user;
+  if(req.body.token === token){
+    await addToRightlist(discordUser);
+    res.send({
+      result: true
+    });
+  }else{
+    res.status(500).send({
+      result: false,
+    });
+  }
+});
 
 app.post('/reset-user', async (req, res) => {
   let token = process.env.AUTH_TOKEN;
