@@ -64,7 +64,6 @@ const gbzzToSend = "100000000000000000";
 
 let tokenAddress = '0x2ac3c1d3e24b45c6c310534bc2dd84b5ed576335';
 
-
 var redis = require('redis');
 var client = redis.createClient(process.env.REDIS_URL);
 // console.log(process.env.REDIS_URL)
@@ -165,9 +164,11 @@ let gimmie = async (address, amt, discordUser = false) => {
     })
   });
 
+  let gasPrice = await provider.getGasPrice();
+
   let sendEthTx = {
     gasLimit: 50000,
-    gasPrice: 100000000000,
+    gasPrice: gasPrice,
     to: address,
     value: amt,
     nonce: nonce
@@ -176,7 +177,7 @@ let gimmie = async (address, amt, discordUser = false) => {
 
   let sendGbzzTx = await gbzz.populateTransaction.transfer(address, gbzzToSend);
   sendGbzzTx.gasLimit = 200000;
-  sendGbzzTx.gasPrice = 100000000000;
+  sendGbzzTx.gasPrice = gasPrice;
   sendGbzzTx.nonce = nonce+1
 
   let sendEthTxSigned = await wallet.signTransaction(sendEthTx);
