@@ -142,10 +142,12 @@ let getRightList = async (user) => {
 }
 
 let isOnRightList = async (user) => {
-  client.sismember('rightlisted-users', user, (err,res)=>{
-    if(err !== null) throw new Error(err);
-    return res === 1
-  })
+  return await new Promise((resolve,reject)=>{
+    client.sismember('rightlisted-users', user, (err,res)=>{
+      if(err !== null) throw new Error(err);
+      resolve(res === 1);
+    })
+  });
 }
 
 
@@ -172,7 +174,7 @@ let waitForConfirmation = async (tx) => {
 let gimmie = async (address, amt, discordUser = false) => {
   let gimmieID = crypto.randomBytes(20).toString('hex');
 
-  let rightListed = isOnRightList(discordUser);
+  let rightListed = await isOnRightList(discordUser);
   
   let discordUserCount = await getDiscordUserCount(discordUser);
 
