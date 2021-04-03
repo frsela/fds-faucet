@@ -279,6 +279,14 @@ app.get('/',(req, res) => {
 
 
 app.post('/gimmie', async (req, res) => {
+  let token = process.env.AUTH_TOKEN;
+  if(req.body.token !== token){
+    res.status(500).send({
+      result: false,
+    });
+    return
+  }
+
   let recipient = req.body.address;
   let discordUser = req.body.user;
   try {
