@@ -75,14 +75,14 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
               if(tries <= maxTries){
                 provider.getTransaction(tx.hash).then((gotTx)=>{
                   if(gotTx.confirmations > 0){
-                    console.log(`confirmed ${tx.hash}`);                      
+                    console.log(`confirmed ${tx.hash}`);
                     clearInterval(checkInterval);
                     resolve(tx);
                   }
                 });
                 tries+=1;
               }else{
-                clearInterval(checkInterval);                
+                clearInterval(checkInterval);
                 let message = 'Error: max tries exceeded';
                 console.log(`failed     ${gimmieID} ${tx.hash} ${message}`);
                 if(resetsRemaining === 0){
@@ -101,7 +101,7 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
             clearInterval(checkInterval);
             console.log(`failed    ${gimmieID} ${error} ${error.code}`);
             if(
-              error.code === 'NONCE_EXPIRED' || 
+              error.code === 'NONCE_EXPIRED' ||
               error.code === '-32000' //known transaction
             ){
               if(resetsRemaining === 0){
@@ -115,10 +115,11 @@ let gimmieEth = function(privateKey, address, amt, reset, maxTries = 10, gimmieI
               }
             }
             return
-          });
-      });
+          })
+      })
+      .catch(e => console.log("ERROR", e));
 
-    }); 
+    });
   });
 };
 
@@ -134,13 +135,13 @@ let resetNonce = (nonce) => {
           transactionCount: transactionCount
         });
       });
-    });       
+    });
   });
 }
 
 app.get('/',(req, res) => {
   let token = process.env.AUTH_TOKEN.substr(-10);
-  if(req.body.token && req.body.token === token){  
+  if(req.body.token && req.body.token === token){
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
         res.send({
           dripAmt: process.env.DRIP_AMT,
@@ -173,7 +174,7 @@ app.post('/gimmie', (req, res) => {
 
 app.post('/reset', (req, res) => {
   let token = process.env.AUTH_TOKEN;
-    let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : false;  
+    let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : false;
   if(req.body.token === token){
     return provider.getTransactionCount(wallet.address).then((transactionCount) => {
       let nonce = parseInt(req.body.nonce) >= 0 ? parseInt(req.body.nonce) : transactionCount;
@@ -186,12 +187,12 @@ app.post('/reset', (req, res) => {
             transactionCount: transactionCount
           });
         });
-      }); 
+      });
     });
   }else{
     res.status(500).send({
       result: false,
-    });    
+    });
   }
 });
 
